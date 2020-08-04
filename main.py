@@ -3,6 +3,8 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+from visualize import visualize_q_table
+
 
 class HumanPlayer:
     def __init__(self, sign):
@@ -26,10 +28,17 @@ class HumanPlayer:
 
 
 class QPlayer:
-    def __init__(self, sign, q_path):
+    def __init__(self, sign, q_path, init='random'):
         self.sign = sign
         if q_path is None:
-            self.q_table = np.ones(shape=(3**9, 9))
+            if init == 'random':
+                self.q_table = np.random.uniform(low=0, high=1, size=(3**9, 9))
+            elif init == 'zeros':
+                self.q_table = np.zeros(shape=(3**9, 9))
+            elif init == 'ones':
+                self.q_table = np.ones(shape=(3**9, 9))
+            else:
+                raise ValueError('init can only be (random, zeros, or ones)')
         else:
             self.q_table = np.load(q_path)
 
@@ -58,14 +67,15 @@ class QPlayer:
 
 
 class Trainer:
-    def __init__(self, q1=None, q2=None):
-        self.q1 = q1
-        self.q2 = q2
-        self.player1 = QPlayer('o', q1)
-        if q2 == 'human':
+    def __init__(self, player1={'q': None, 'init': 'random'},
+                 player2={'q': None, 'init': 'random'}):
+        self.p1_dict = player1
+        self.p2_dict = player2
+        self.player1 = QPlayer('o', player1['q'], player1['init'])
+        if player2['q'] == 'human':
             self.player2 = HumanPlayer('x')
         else:
-            self.player2 = QPlayer('x', q2)
+            self.player2 = QPlayer('x', player2['q'], player2['init'])
 
     def train(self, lr, discount, episodes, show_every, epsilon,
               start_epsilon_decay, end_epsilon_decay, save_every, save_path):
@@ -86,7 +96,10 @@ class Trainer:
 
         # Save the params in params.txt
         with open(f'{save_path}/params.txt', 'w+') as f:
-            content = f'player1: {self.q1}\nplayer2: {self.q2}'
+            content = f'player1: {self.p1_dict["q"]}'
+            content += f'\nplayer2: {self.p2_dict["q"]}'
+            content += f'\ninit1: {self.p1_dict["init"]}'
+            content += f'\ninit2: {self.p2_dict["init"]}'
             content += f'\nlr: {lr}\ndiscount: {discount}'
             content += f'\nepisodes: {episodes}'
             content += f'\nshow_every: {show_every}\nepsilon: {epsilon}'
@@ -96,7 +109,10 @@ class Trainer:
             f.write(content)
 
         for episode in range(episodes):
-            print(episode, end='\r')
+            temp = self.player1.q_table.sum(axis=1)
+            print(episode, ':',
+                  (len(temp) - len(temp[temp == 0])) / len(temp) * 100,
+                  '%', end='\r')
             # Get initial state
             tictactoe = TicTacToe('cpu', 'cpu')
             state = tictactoe.getStateHash()
@@ -145,13 +161,13 @@ class Trainer:
                     self.player1.q_table[state, action] = new_q
 
                     # Player 2 turn
-                    if self.q2 is None:
+                    if self.p2_dict['q'] is None:
                         # If q2 path is None, i.e using random agent
-                        # Get the action from the trained player 1 itself
-                        action = self.player1.choose(tictactoe.board,
-                                                     tictactoe.getStateHash(),
-                                                     False)
-                    elif self.q2 == 'human':
+                        action = np.random.randint(0, 9)
+                        while not self.player1.validMove(action,
+                                                         tictactoe.board):
+                            action = np.random.randint(0, 9)
+                    elif self.p2_dict['q'] == 'human':
                         # If player 2 is a human, let the human choose the
                         # action
                         action = self.player2.choose(
@@ -175,8 +191,9 @@ class Trainer:
 
             # Update the aggregate rewards
             if episode % record_rewards == 0:
-                print('Avg. Lose Prob:', losecount / record_rewards * 100,
-                      '%\tAvg.Win Prob:', wincount / record_rewards * 100, '%')
+                # print('Avg. Lose Prob:', losecount / record_rewards * 100,
+                #       '%\tAvg.Win Prob:', wincount / record_rewards * 100,
+                #       '%')
                 wincount = 0
                 losecount = 0
                 avg_reward = sum(
@@ -213,7 +230,8 @@ class Trainer:
         plt.plot(aggr_rewards['ep'], aggr_rewards['max'], label='maximum')
         plt.legend(loc=4)
         plt.savefig(f'{save_path}/reward_stats.png')
-        plt.show()
+        plt.clf()
+        # plt.show()
 
 
 class TicTacToe:
@@ -331,18 +349,22 @@ class TicTacToe:
 
         return self.getStateHash(), reward, self.terminal, self.winning
 
-    def play(self):
+    def play(self, verbose=True):
         # Initial tic tac toe state
         self.printBoard()
         while not self.terminal:
             # Player 1 turn
+            if verbose:
+                print("Player 1, play your turn")
             action = self.player1.choose(self.board, self.getStateHash())
-            self.update(action, 'o')
+            self.update(action, 'o', printBoard=verbose)
 
             if not self.terminal:
                 # Player 2 turn
+                if verbose:
+                    print("Player 2, play your turn")
                 action = self.player2.choose(self.board, self.getStateHash())
-                self.update(action, 'x')
+                self.update(action, 'x', printBoard=verbose)
 
         # Check if someone won the game
         if self.winning == 0:
@@ -352,18 +374,47 @@ class TicTacToe:
         else:
             print('Player x won the game!')
 
+        return self.winning
+
 
 if __name__ == "__main__":
     train = False
 
     if not train:
-        tictactoe = TicTacToe('cpu', 'human',
-                              q_path1='models8-1/q_table_150000.npy')
-        tictactoe.play()
+        wins = {}
+        for i in range(10000):
+            print(i, end='\r')
+            tictactoe = TicTacToe('cpu', 'cpu',
+                                  q_path1='models3/q_table_300000.npy')
+            win = tictactoe.play(verbose=False)
+            if win in wins:
+                wins[win] += 1
+            else:
+                wins[win] = 1
+        for i, k in wins.items():
+            del wins[i]
+            if i == 0:
+                i = 'Tie'
+            elif i == 'o':
+                i = 'Win'
+            else:
+                i = 'Lose'
+            wins[i] = k/100
+        with open('models3/results_random.txt', 'w+') as f:
+            f.write('Results of 10000 games against random\
+agent in percentage:\n')
+            f.write(str(wins))
+
     else:
-        trainer = Trainer(q1='models8/q_table_150000.npy',
-                          q2='human')
-        trainer.train(lr=0.9, discount=0.95, episodes=150001, show_every=5000,
-                      epsilon=1, start_epsilon_decay=1,
-                      end_epsilon_decay=100000, save_every=10000,
-                      save_path='models8-2')
+        for i, init in zip(range(2, 3), ['random', 'zeros', 'ones']):
+            print("Current model: ", i, end='\r')
+            trainer = Trainer(
+                player1={'q': f'models{i}/q_table_300000.npy', 'init': None})
+            trainer.train(lr=0.9, discount=0.95, episodes=3_00_001,
+                          show_every=3_00_000, epsilon=1,
+                          start_epsilon_decay=1,
+                          end_epsilon_decay=2_50_000, save_every=5_000,
+                          save_path=f'models{i}')
+            visualize_q_table(dirname=f'models{i}',
+                              high=3_00_000,
+                              iterate=5_000)

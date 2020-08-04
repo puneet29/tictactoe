@@ -1,0 +1,13 @@
+player1: None
+player2: None
+init1: ones
+init2: random
+lr: 0.9
+discount: 0.95
+episodes: 300001
+show_every: 200000
+epsilon: 1
+start_epsilon_decay: 1
+end_epsilon_decay: 250000
+save_every: 5000
+save_path: models3
