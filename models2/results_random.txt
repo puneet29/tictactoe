@@ -1,2 +1,0 @@
-Results of 10000 games against randomagent in percentage:
-{'Lose': 14.07, 'Win': 80.41, 'Tie': 5.52}

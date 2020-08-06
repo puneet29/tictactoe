@@ -1,0 +1,2 @@
+Results of 10000 games against minimax agent in percentage:
+{'Tie': 99.0, 'Lose': 1.0}

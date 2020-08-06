@@ -2,17 +2,21 @@
 
 This repo is an experiment to try making a model to learn how to play tic tac toe with experience. For this I will try using Reinforcement learning using Deep learning.
 
+## Acknowledgement
+
+This is my second try at reinforcement learning. I have not studied reinforcement learning before except that I have tried an OpenAI Gym game before attempting this project. This is solely my own concept and code. In case you find any bugs or discrepencies or a better version, I will be happy to hear. I want to thank @sentdex for his tutorials, the project-first learning approach really does make you learn a lot on the way.
+
 ## Experiments
 
-I am new to reinforcement learning and have not tackled any dual player games yet. This is my first attempt on taking on a dual player game coming straight from the single player game. Also, this is my very second reinforcement learning problem that I am trying to solve and without any help from internet.
+All experiments did before were not accurate because there was a minor logic error in code. I have fixed the code and now everything works fine. All of the models have attained the best possible policy. All of these tie with the minimax(Most Optimal agent). I have ran `300,000` episodes, however each initialization (zero, ones, and random) will have their own learning curves. Also I have only tried training as player 1. The process will be similar for training player 2.
 
-I have tried changing the learning rates, reward, no. of episodes, epsilon decay, q-table initializations, player 2 (self, random agent, random steps, trained agent [Only q learners]) but wasn't able to get human like good performance in the game.
+Each models folder contains:
 
-On visualizing the q tables, I found out that most of the states were not explored and as our second agent was mostly random, the agent didn't learn much better moves. As I can't play as second player for more than 100 games(being much generous in terms of training episodes). So, for that I have implemented a Minimax Agent to play the game as second player. I hope this will improve our agent way more than a random player. The curiousity is whether it will be as good as the minimax or poor than that.
-
-I have also linked how the models performed upon initialization of q table in each folder with `params.txt` defining all the params at the time of training.
+1. `params.txt` which tells the parameters at the time of training,
+2. `reward_stats.png` which shows the maximum, average and minimum rewards collected over the buckets of 500 episodes,
+3. `results_minimax.txt` which contains the results of the model when competed with minimax agent,
+4. `q_visualized.html` (if you run the training process yourself) which contains the visualization of the Q-Table
 
 ## Next up
 
-1. Training with minimax agent as player 2
-2. **Major refactoring of code is needed**
+1. **Major refactoring of code is needed**

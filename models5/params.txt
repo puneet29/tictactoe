@@ -1,7 +1,7 @@
 player1: qagent
 path1: None
-init1: zeros
-player2: random
+init1: random
+player2: minimax
 lr: 0.9
 discount: 0.95
 episodes: 300001
@@ -11,4 +11,4 @@ epsilon_decay_value: 3.5714413265761662e-06
 start_epsilon_decay: 1
 end_epsilon_decay: 280000
 save_every: 5000
-save_path: models2
+save_path: models5

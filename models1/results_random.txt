@@ -1,2 +1,0 @@
-Results of 10000 against random agent in percentage:
-{'Tie': 14.47, 'Lose': 35.73, 'Win': 49.8}

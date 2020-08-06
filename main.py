@@ -20,19 +20,24 @@ class Player:
 class HumanPlayer(Player):
     def __init__(self, sign):
         self.sign = sign
+        self.name = 'human'
 
     def choose(self, tictactoe):
         """Prompts user to make a choice"""
-        action = int(input(f'Player {self.sign}, type your move: '))
+        action = int(input(f'Type your move: '))
         while(not self.validMove(action-1, tictactoe.board)):
             print('Enter a valid move')
-            action = int(input(f'Player {self.sign}, type your move: '))
+            action = int(input(f'Type your move: '))
         return action - 1
 
 
 class QPlayer(Player):
     def __init__(self, sign, q_path, init='random'):
         self.sign = sign
+        self.q_path = q_path
+        self.init = init
+        self.name = 'qagent'
+
         if q_path is None:
             if init == 'random':
                 self.q_table = np.random.uniform(low=0, high=1, size=(3**9, 9))
@@ -48,12 +53,32 @@ class QPlayer(Player):
     def choose(self, tictactoe, verbose=True):
         """Make a choice"""
         if tictactoe.board != [i for i in range(1, 10)]:
-            state_q = self.q_table[hash]
-            action = np.argmax(state_q)
+            curr_hash = tictactoe.getStateHash()
+            state_q = self.q_table[curr_hash]
+            best_moves = np.argwhere(state_q == np.amax(state_q))
+            best_moves = best_moves.flatten().tolist()
+            action = np.random.choice(best_moves)
             while(not self.validMove(action, tictactoe.board)):
                 state_q[action] = -100
-                action = np.argmax(state_q)
+                best_moves = np.argwhere(state_q == np.amax(state_q))
+                best_moves = best_moves.flatten().tolist()
+                action = np.random.choice(best_moves)
         else:
+            action = np.random.randint(0, 9)
+        if verbose:
+            print('Thinking... Action:', action+1)
+        return action
+
+
+class RandomPlayer(Player):
+    def __init__(self, sign):
+        self.sign = sign
+        self.name = 'random'
+
+    def choose(self, tictactoe, verbose=True):
+        """Make a choice"""
+        action = np.random.randint(0, 9)
+        while not self.validMove(action, tictactoe.board):
             action = np.random.randint(0, 9)
         if verbose:
             print('Thinking... Action:', action+1)
@@ -63,28 +88,40 @@ class QPlayer(Player):
 class MinMaxPlayer(Player):
     def __init__(self, sign):
         self.sign = sign
-        self.maximizing = True if sign == 'o' else False
+        self.opponent = 'x' if sign == 'o' else 'o'
+        self.name = 'minimax'
+        if not os.path.exists('cache'):
+            os.makedirs('cache')
+        self.cache_path = 'cache/minimax.npy'
+        if not os.path.exists(self.cache_path):
+            self.cache = np.zeros(shape=(3**9, 9))
+        else:
+            self.cache = np.load(self.cache_path)
 
-    def minimax(self, tictactoe, maximize):
+    def minimax(self, tictactoe, depth, maximize):
         """Implement minimax algorithm"""
-        SCORES = {'x': -10, 'o': 10, 0: 0}
         if tictactoe.terminal:
-            return SCORES[tictactoe.winning]
+            if tictactoe.winning == self.sign:
+                return 10 - depth
+            elif tictactoe.winning == self.opponent:
+                return -10 + depth
+            else:
+                return 0
 
         if maximize:
             best_score = -sys.maxsize
             for i in range(9):
                 if self.validMove(i, tictactoe.board):
-                    tictactoe.update(i, 'o', False)
-                    score = self.minimax(tictactoe, False)
+                    tictactoe.update(i, self.sign, False)
+                    score = self.minimax(tictactoe, depth+1, False)
                     tictactoe.update(i, i+1, False)
                     best_score = max(score, best_score)
         else:
             best_score = sys.maxsize
             for i in range(9):
                 if self.validMove(i, tictactoe.board):
-                    tictactoe.update(i, 'x', False)
-                    score = self.minimax(tictactoe, True)
+                    tictactoe.update(i, self.opponent, False)
+                    score = self.minimax(tictactoe, depth+1, True)
                     tictactoe.update(i, i+1, False)
                     best_score = min(score, best_score)
         return best_score
@@ -92,20 +129,28 @@ class MinMaxPlayer(Player):
     def choose(self, tictactoe, verbose=True):
         """Make a choice"""
         best_score = -sys.maxsize
-        best_move = -1
-        for i in range(9):
-            if self.validMove(i, tictactoe.board):
-                tictactoe.update(i, self.sign, False)
-                score = self.minimax(tictactoe, False)
-                tictactoe.update(i, i+1, False)
-                if self.maximizing:
+        best_moves = []
+        curr_hash = tictactoe.getStateHash()
+        if self.cache[curr_hash].sum() == 0:
+            for i in range(9):
+                if self.validMove(i, tictactoe.board):
+                    tictactoe.update(i, self.sign, False)
+                    score = self.minimax(tictactoe, 1, False)
+                    tictactoe.update(i, i+1, False)
+                    if score == best_score:
+                        best_moves.append(i)
                     if score > best_score:
                         best_score = score
-                        best_move = i
-                else:
-                    if score < best_score:
-                        best_score = score
-                        best_move = i
+                        best_moves = [i]
+            for best_move in best_moves:
+                self.cache[curr_hash][best_move] = 1
+            np.save(self.cache_path, self.cache)
+        else:
+            best_moves = np.argwhere(
+                self.cache[curr_hash] == np.amax(self.cache[curr_hash]))
+            best_moves = best_moves.flatten()
+        best_move = np.random.choice(best_moves)
+
         if verbose:
             print('Thinking... Action:', best_move+1)
 
@@ -115,25 +160,24 @@ class MinMaxPlayer(Player):
 
 
 class Trainer:
-    def __init__(self, player1={'q': None, 'init': 'random'},
-                 player2={'q': None, 'init': 'random'}):
-        self.p1_dict = player1
-        self.p2_dict = player2
-        self.player1 = QPlayer('o', player1['q'], player1['init'])
-        if player2['q'] == 'human':
+    def __init__(self, q1=None, init='random',
+                 player2=None, q2=None, init2='random'):
+        self.player1 = QPlayer('o', q1, init)
+        if player2 == 'human':
             self.player2 = HumanPlayer('x')
-        else:
-            self.player2 = QPlayer('x', player2['q'], player2['init'])
+        elif player2 == 'minimax':
+            self.player2 = MinMaxPlayer('x')
+        elif player2 == 'qagent':
+            self.player2 = QPlayer('x', q2, init2)
+        elif player2 == 'random':
+            self.player2 = RandomPlayer('x')
 
     def train(self, lr, discount, episodes, show_every, epsilon,
-              start_epsilon_decay, end_epsilon_decay, save_every, save_path):
+              start_epsilon_decay, end_epsilon_decay, epsilon_decay_value,
+              save_every, save_path):
 
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-
-        # Epsilon decay value
-        epsilon_decay_value = epsilon / \
-            (end_epsilon_decay - start_epsilon_decay)
 
         # Rewards
         overall_rewards = []
@@ -141,28 +185,31 @@ class Trainer:
         record_rewards = 500
         wincount = 0
         losecount = 0
+        tiecount = 0
 
         # Save the params in params.txt
         with open(f'{save_path}/params.txt', 'w+') as f:
-            content = f'player1: {self.p1_dict["q"]}'
-            content += f'\nplayer2: {self.p2_dict["q"]}'
-            content += f'\ninit1: {self.p1_dict["init"]}'
-            content += f'\ninit2: {self.p2_dict["init"]}'
+            content = f'player1: {self.player1.name}'
+            content += f'\npath1: {self.player1.q_path}'
+            content += f'\ninit1: {self.player1.init}'
+            content += f'\nplayer2: {self.player2.name}'
+            if isinstance(self.player2, QPlayer):
+                content += f'\npath2: {self.player2.q_path}'
+                content += f'\ninit2: {self.player2.init}'
             content += f'\nlr: {lr}\ndiscount: {discount}'
             content += f'\nepisodes: {episodes}'
             content += f'\nshow_every: {show_every}\nepsilon: {epsilon}'
+            content += f'\nepsilon_decay_value: {epsilon_decay_value}'
             content += f'\nstart_epsilon_decay: {start_epsilon_decay}'
             content += f'\nend_epsilon_decay: {end_epsilon_decay}'
             content += f'\nsave_every: {save_every}\nsave_path: {save_path}'
             f.write(content)
 
         for episode in range(episodes):
-            temp = self.player1.q_table.sum(axis=1)
-            print(episode, ':',
-                  (len(temp) - len(temp[temp == 0])) / len(temp) * 100,
-                  '%', end='\r')
+            print('Episode:', episode, end='\r')
             # Get initial state
-            tictactoe = TicTacToe('cpu', 'cpu')
+            tictactoe = TicTacToe(player1=self.player1.name,
+                                  player2=self.player2.name)
             state = tictactoe.getStateHash()
             done = False
             episode_reward = 0
@@ -192,7 +239,7 @@ class Trainer:
                         action = np.random.randint(0, 9)
 
                 if render:
-                    print('Training', action+1)
+                    print('[Training] Player 1:', action+1)
 
                 # Make the new action
                 new_state, reward, done, winning = tictactoe.update(
@@ -201,36 +248,27 @@ class Trainer:
                 episode_reward += reward
 
                 if not done:
+                    # Player 2 turn
+                    if isinstance(self.player2, HumanPlayer):
+                        # If player 2 is a human, let the human choose the
+                        # action
+                        action = self.player2.choose(tictactoe)
+                    else:
+                        # If player 2 is minmax player or random
+                        # or q agent choose the action
+                        action = self.player2.choose(tictactoe, False)
+
+                    if render:
+                        print('Player 2:', action+1)
+                    new_state, reward, done, winning = tictactoe.update(
+                        action, self.player2.sign, render)
+
                     # Update the q-table
                     max_future_q = np.max(self.player1.q_table[new_state])
                     current_q = self.player1.q_table[state, action]
                     new_q = (1-lr) * current_q + lr * \
                         (reward + discount * max_future_q)
                     self.player1.q_table[state, action] = new_q
-
-                    # Player 2 turn
-                    if self.p2_dict['q'] is None:
-                        # If q2 path is None, i.e using random agent
-                        action = np.random.randint(0, 9)
-                        while not self.player1.validMove(action,
-                                                         tictactoe.board):
-                            action = np.random.randint(0, 9)
-                    elif self.p2_dict['q'] == 'human':
-                        # If player 2 is a human, let the human choose the
-                        # action
-                        action = self.player2.choose(
-                            tictactoe.board, tictactoe.getStateHash())
-                    else:
-                        # If the q2 path is not empty, let the trained player 2
-                        # choose the action
-                        action = self.player2.choose(
-                            tictactoe.board, tictactoe.getStateHash(),
-                            False)
-
-                    if render:
-                        print('Random', action+1)
-                    new_state, reward, done, winning = tictactoe.update(
-                        action, self.player2.sign, render)
 
                 # Update the new state
                 state = new_state
@@ -239,10 +277,12 @@ class Trainer:
 
             # Update the aggregate rewards
             if episode % record_rewards == 0:
-                # print('Avg. Lose Prob:', losecount / record_rewards * 100,
-                #       '%\tAvg.Win Prob:', wincount / record_rewards * 100,
-                #       '%')
+                print('Avg. Lose Prob:', losecount / record_rewards * 100,
+                      '%\tAvg. Tie Prob:', tiecount / record_rewards * 100,
+                      '%\tAvg. Win Prob:', wincount / record_rewards * 100,
+                      '%')
                 wincount = 0
+                tiecount = 0
                 losecount = 0
                 avg_reward = sum(
                     overall_rewards[-record_rewards:]) / record_rewards
@@ -259,14 +299,15 @@ class Trainer:
                 wincount += 1
                 self.player1.q_table[state, action] = 1
             elif winning == 0:
-                self.player1.q_table[state, action] = 0.5
+                tiecount += 1
+                self.player1.q_table[state, action] = 0
             else:
                 losecount += 1
-                self.player1.q_table[state, action] = 0
+                self.player1.q_table[state, action] = -1
 
             # Save the q-table to save_path
             if episode % save_every == 0:
-                np.save(f'{save_path}/q_table_{episode}.npy',
+                np.save(f'{save_path}/{episode}.npy',
                         self.player1.q_table)
 
             if end_epsilon_decay >= episode >= start_epsilon_decay:
@@ -285,12 +326,13 @@ class Trainer:
 class TicTacToe:
     def __init__(self, player1='human', player2='human',
                  q_path1=None, q_path2=None):
-        if player1 not in ('human', 'qagent', 'minimax'):
+        if player1 not in ('human', 'qagent', 'minimax', 'random'):
+            raise ValueError('player1 only accepts 4 values\
+ (human, qagent, minimax, random)')
+        if player2 not in ('human', 'qagent', 'minimax', 'random'):
             raise ValueError(
-                'player1 only accepts 3 values (human, qagent, minimax)')
-        if player2 not in ('human', 'qagent', 'minimax'):
-            raise ValueError(
-                'player2 only accepts 3 values (human, qagent, minimax)')
+                'player2 only accepts 4 values\
+ (human, qagent, minimax, random)')
         if q_path1 is not None and player1 in ('human', 'minimax'):
             raise ValueError('can only use q_path1 with player1=qagent')
         if q_path2 is not None and player2 in ('human', 'minimax'):
@@ -304,6 +346,8 @@ class TicTacToe:
             self.player1 = HumanPlayer('o')
         elif player1 == 'qagent':
             self.player1 = QPlayer('o', q_path1)
+        elif player1 == 'random':
+            self.player1 = RandomPlayer('o')
         else:
             self.player1 = MinMaxPlayer('o')
 
@@ -311,6 +355,8 @@ class TicTacToe:
             self.player2 = HumanPlayer('x')
         elif player2 == 'qagent':
             self.player2 = QPlayer('x', q_path2)
+        elif player2 == 'random':
+            self.player2 = RandomPlayer('x')
         else:
             self.player2 = MinMaxPlayer('x')
 
@@ -365,6 +411,9 @@ class TicTacToe:
         else:
             self.terminal = True
 
+        # For Minimax simulation
+        self.winning = 0
+
         # Check the winning states
         for i in range(3):
             if self.board[3*i] == self.board[3*i+1] and\
@@ -393,13 +442,13 @@ class TicTacToe:
         # Defining reward for each move
         if self.terminal:
             if self.winning == 0:
-                reward = 0.5
+                reward = 0
             elif self.winning == sign:
                 reward = 1
             elif self.winning != sign:
-                reward = 0
+                reward = -1
         else:
-            reward = 0
+            reward = -0.1
 
         return self.getStateHash(), reward, self.terminal, self.winning
 
@@ -431,50 +480,107 @@ class TicTacToe:
         return self.winning
 
 
+def evaluate(qpath, player2='minimax', rounds=10000):
+    """Evaluate the model"""
+    wins = {}
+    for i in range(rounds):
+        print(i, end='\r')
+        tictactoe = TicTacToe(player1='qagent',
+                              q_path1=qpath,
+                              player2=player2)
+        win = tictactoe.play(verbose=False)
+        if win in wins:
+            wins[win] += 1
+        else:
+            wins[win] = 1
+
+    if 0 in wins:
+        wins['Tie'] = wins.pop(0) / rounds * 100
+    if 'o' in wins:
+        wins['Win'] = wins.pop('o') / rounds * 100
+    if 'x' in wins:
+        wins['Lose'] = wins.pop('x') / rounds * 100
+
+    with open(os.path.join(os.path.dirname(qpath),
+                           'results_minimax.txt'), 'w+') as f:
+        f.write(f'Results of {rounds} games against {player2}\
+ agent in percentage:\n')
+        f.write(str(wins))
+
+
 if __name__ == "__main__":
-    modes = ['train', 'evaluate', 'single_run']
+    print('Select a mode:')
+    print('Mode 1: Training')
+    print('Mode 2: Evaluate')
+    print('Mode 3: Single Run')
+    mode = int(input('Enter mode number: '))
 
-    mode = modes[2]
+    if mode == 1:
+        # Define the params for training
+        LR = 0.9
+        DISCOUNT = 0.95
+        EPISODES = 3_00_001
+        SHOW_EVERY = 3_00_000
+        EPSILON = 1
+        START_EPSILON_DECAY = 1
+        END_EPSILON_DECAY = 2_80_000
+        SAVE_EVERY = 5000
 
-    if mode == 'single_run':
-        tictactoe = TicTacToe(player1='minimax', player2='human')
+        # Calculate the uniform epsilon decay value
+        epsilon_decay_value = EPSILON / \
+            (END_EPSILON_DECAY - START_EPSILON_DECAY)
+
+        for num, player2 in enumerate(['random', 'minimax']):
+            for i, init in enumerate(['random', 'zeros', 'ones'], start=1):
+                SAVE_PATH = f'models{num*3+i}'
+
+                trainer = Trainer(init=init, player2=player2)
+                trainer.train(lr=LR, discount=DISCOUNT, episodes=EPISODES,
+                              show_every=SHOW_EVERY, epsilon=EPSILON,
+                              start_epsilon_decay=START_EPSILON_DECAY,
+                              end_epsilon_decay=END_EPSILON_DECAY,
+                              epsilon_decay_value=epsilon_decay_value,
+                              save_every=SAVE_EVERY,
+                              save_path=SAVE_PATH)
+                visualize_q_table(dirname=SAVE_PATH,
+                                  high=EPISODES-1,
+                                  iterate=SAVE_EVERY)
+                evaluate(qpath=f'{SAVE_PATH}/{EPISODES-1}.npy')
+    elif mode == 2:
+        path = input('Enter Q-Table\'s path: ')
+
+        valid_values = ('human', 'random', 'qagent', 'minimax')
+        player2 = input(f'Enter player 2 {valid_values}: ')
+        while player2 not in valid_values:
+            print('Invalid input')
+            player2 = input(f'Enter player 2 {valid_values}: ')
+
+        rounds = int(input('Enter number of rounds: '))
+
+        evaluate(qpath=path, player2=player2, rounds=rounds)
+    elif mode == 3:
+        valid_values = ('human', 'random', 'qagent', 'minimax')
+        prompt = 'Enter {}' + str(valid_values) + ': '
+        players = []
+        q_paths = []
+
+        for num in range(1, 3):
+            player = input(prompt.format(f'player {num}')).lower().strip()
+            while player not in valid_values:
+                print('Invalid input')
+                player = input(prompt.format(f'player {num}')).lower().strip()
+            players.append(player)
+
+            sub_prompt = 'Enter the path to Q-Table. '
+            sub_prompt += 'Enter none, for randomly initialized Q-Table: '
+            if player == 'qagent':
+                q_path = input(sub_prompt).lower().strip()
+                if q_path == 'none':
+                    q_path = None
+                q_paths.append(q_path)
+            else:
+                q_paths.append(None)
+
+        tictactoe = TicTacToe(player1=players[0], player2=players[1],
+                              q_path1=q_paths[0], q_path2=q_paths[1])
         tictactoe.play()
-
-    elif mode == 'evaluate':
-        wins = {}
-        for i in range(10000):
-            print(i, end='\r')
-            tictactoe = TicTacToe('cpu', 'cpu',
-                                  q_path1='models3/q_table_300000.npy')
-            win = tictactoe.play(verbose=False)
-            if win in wins:
-                wins[win] += 1
-            else:
-                wins[win] = 1
-        for i, k in wins.items():
-            del wins[i]
-            if i == 0:
-                i = 'Tie'
-            elif i == 'o':
-                i = 'Win'
-            else:
-                i = 'Lose'
-            wins[i] = k/100
-        with open('models3/results_random.txt', 'w+') as f:
-            f.write('Results of 10000 games against random\
-agent in percentage:\n')
-            f.write(str(wins))
-
-    else:
-        for i, init in zip(range(2, 3), ['random', 'zeros', 'ones']):
-            print("Current model: ", i, end='\r')
-            trainer = Trainer(
-                player1={'q': f'models{i}/q_table_300000.npy', 'init': None})
-            trainer.train(lr=0.9, discount=0.95, episodes=3_00_001,
-                          show_every=3_00_000, epsilon=1,
-                          start_epsilon_decay=1,
-                          end_epsilon_decay=2_50_000, save_every=5_000,
-                          save_path=f'models{i}')
-            visualize_q_table(dirname=f'models{i}',
-                              high=3_00_000,
-                              iterate=5_000)
