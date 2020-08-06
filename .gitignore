@@ -1,3 +1,5 @@
 __pycache__
 *.npy
 *.html
+
+!pretrained_model.npy

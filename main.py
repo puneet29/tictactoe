@@ -532,7 +532,7 @@ if __name__ == "__main__":
 
         for num, player2 in enumerate(['random', 'minimax']):
             for i, init in enumerate(['random', 'zeros', 'ones'], start=1):
-                SAVE_PATH = f'models{num*3+i}'
+                SAVE_PATH = f'model{num*3+i}'
 
                 trainer = Trainer(init=init, player2=player2)
                 trainer.train(lr=LR, discount=DISCOUNT, episodes=EPISODES,
@@ -571,12 +571,15 @@ if __name__ == "__main__":
                 player = input(prompt.format(f'player {num}')).lower().strip()
             players.append(player)
 
-            sub_prompt = 'Enter the path to Q-Table. '
+            sub_prompt = 'Enter the path to Q-Table.\n'
+            sub_prompt += 'Enter default for pretrained model.\n'
             sub_prompt += 'Enter none, for randomly initialized Q-Table: '
             if player == 'qagent':
                 q_path = input(sub_prompt).lower().strip()
                 if q_path == 'none':
                     q_path = None
+                elif q_path == 'default':
+                    q_path = 'pretrained_model.npy'
                 q_paths.append(q_path)
             else:
                 q_paths.append(None)
