@@ -502,7 +502,7 @@ def evaluate(qpath, player2='minimax', rounds=10000):
         wins['Lose'] = wins.pop('x') / rounds * 100
 
     with open(os.path.join(os.path.dirname(qpath),
-                           'results_minimax.txt'), 'w+') as f:
+                           f'results_{player2}.txt'), 'w+') as f:
         f.write(f'Results of {rounds} games against {player2}\
  agent in percentage:\n')
         f.write(str(wins))
