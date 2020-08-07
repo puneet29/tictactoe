@@ -106,6 +106,8 @@ def gameLoop():
                 quitGame()
 
         if tictactoe.terminal:
+            if tictactoe.winning != 0:
+                time.sleep(2)
             terminalScreen(tictactoe.winning)
 
         for start, end in points:
